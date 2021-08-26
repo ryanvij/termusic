@@ -6,6 +6,7 @@ import curses
 from loguru import logger
 import sys
 import time
+import threading
 from pathlib import Path
 from pygame import mixer
 
@@ -50,7 +51,7 @@ def initalize():
                 sys.exit()
 
     tracked_dirs = []
-    with open(ASSETS / 'termusicpaths.txt', 'r') as f:
+    with open(ASSETS / 'termusicpaths.txt', "r") as f:
         for path in f.readlines():
             tracked_dirs.append(path.strip('\n'))
 
@@ -58,11 +59,51 @@ def initalize():
 
 
 
-
 mixer.init()
 logger.add('termusic.log',format='{time:YYYY-MM-DD at HH:mm:ss} | {level} | {message}')
 
+def draw_select(stdscr, idx, paths):
+    stdscr.clear()
+    pos = 3
+    stdscr.addstr(pos-2, 2, "Select Playlist", curses.color_pair(1))
+    for path in paths:
+        if paths.index(path) == idx:
+            stdscr.addstr(pos, 3, "> " +  path)
+        else:
+            stdscr.addstr(pos, 3, path)
+
+        pos += 2
+
+def select_playlist(stdscr):
+    idx = 0
+    paths = []
+    with open(ASSETS/"termusicpaths.txt", "r") as pt:
+        paths = list(map(lambda x: x.strip("\n"), pt.readlines()))
+    draw_select(stdscr, idx, paths)
+    key = stdscr.getch()
+
+    while key != 113:
+        if key == curses.KEY_DOWN and idx != len(paths) - 1:
+            idx += 1
+            draw_select(stdscr, idx, paths)
+        elif key == curses.KEY_UP and idx != 0:
+            idx -= 1
+            draw_select(stdscr, idx, paths)
+        elif key == curses.KEY_ENTER or key == 10:
+            print(paths[idx])
+
+        key = stdscr.getch()
+
+
+
+    
+
+
+    
 def main(stdscr):
-   pass
+    curses.curs_set(0)
+    curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)
+    select_playlist(stdscr)
 
 curses.wrapper(main)
+
