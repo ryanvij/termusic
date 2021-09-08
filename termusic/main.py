@@ -11,16 +11,21 @@ from pathlib import Path
 from pygame import mixer
 
 
+
 # Relative path to assets folder, from __file__
 ASSETS = Path(__file__).parent / 'assets'
 # .ogg, .mp3 and .wav are the currently supported audio formats, and only files with these extensions are extracted from the folder.
 audio_formats = ['.ogg', '.wav', '.mp3']
 MAX_ROW = 10
-tracks = []
 CURRENT_PATH = ""
 AUDIO_FILES = []
-MAX_ROW = 10
-_close = False
+MAX_ROW = 24
+cidx = None
+cpage = None
+_skip = False
+_paused = False
+_loop = False
+
 
 def extract_audiof(PATH):
     return [os.path.abspath(f) for f in os.scandir(PATH) if f.is_file()
@@ -126,26 +131,66 @@ def select_playlist(stdscr):
         key = stdscr.getch()
 
 
+def draw_utils():
+    utils = curses.newwin(5, 90, 0, 0)
+    utils.box()
+    if cpage is None and cidx is None:
+        pass
+    else:
+        utils.addstr(2, 10, AUDIO_FILES[cpage][cidx])
+        utils.addstr(2, 10, CURRENT_PATH)
+
+    utils.refresh()
+
+    
+
+
 #--------------------------------------------------------------------
 # MUSIC
 #--------------------------------------------------------------------
 
 def load_playlist(pg, index):
-    global _close
+    global cpage, cidx
     fsong = AUDIO_FILES[pg][index]
     flattened = []
     for i in AUDIO_FILES:
         for j in i:
             flattened.append(j)
-
     findex = flattened.index(fsong)
-    print(flattened[findex:])
+
     for song in flattened[findex:]:
+        for i in AUDIO_FILES:
+            for j in i:
+                if j == song:
+                    cidx = i.index(j)
+                    cpage = AUDIO_FILES.index(i)
+                    
         mixer.music.load(song)
         mixer.music.play()
+        draw_utils()
+        
+        while mixer.music.get_busy() or _paused:
+            if cpage != pg or cidx != index:
+                return 0
+                
+            time.sleep(0.01)
+        if _loop:
+                return 0
 
-        while mixer.music.get_busy():
-            time.sleep(0.5)
+        mixer.music.unload()
+
+
+    cpage, cidx = 0, 0
+    return 0
+
+
+def music():
+    while cpage is None and cidx is None:
+        time.sleep(0.1)
+
+    while True:
+        load_playlist(cpage, cidx)
+        
 
 #--------------------------------------------------------------------
 # UI 
@@ -161,10 +206,10 @@ def draw_playlist_box(stdscr, page, idx):
 
     for af in AUDIO_FILES[page]:
         if AUDIO_FILES[page].index(af) == idx:
-            playlist_box.addstr(pos, 2, textwrap.shorten(os.path.basename(af), width=27, placeholder="..."), curses.color_pair(2))
+            playlist_box.addstr(pos, 2, textwrap.shorten(os.path.splitext(os.path.basename(af))[0], width=27, placeholder="..."), curses.color_pair(2))
             pos += 1
         else:
-            playlist_box.addstr(pos, 2, textwrap.shorten(os.path.basename(af), width=27, placeholder="..."))
+            playlist_box.addstr(pos, 2, textwrap.shorten(os.path.splitext(os.path.basename(af))[0], width=27, placeholder="..."))
             pos += 1
 
     stdscr.refresh()
@@ -176,13 +221,16 @@ def main(stdscr):
     curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)
     curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_WHITE)
     stdscr.clear()
-    global AUDIO_FILES, cpage, cidx, _close
+    global AUDIO_FILES, cpage, cidx, _paused, _loop
     page = 0
     idx = 0
     
     AUDIO_FILES = list(chunks(extract_audiof(CURRENT_PATH), MAX_ROW))
     draw_playlist_box(stdscr, page, idx)
+    draw_utils()
 
+    music_ = threading.Thread(target=music)
+    music_.start()
 
     key_pressed = stdscr.getch()
     while key_pressed != 113:
@@ -205,20 +253,62 @@ def main(stdscr):
             draw_playlist_box(stdscr, page, idx)
 
         if key_pressed == 10:
-            music = threading.Thread(target=load_playlist, args=(page, idx,))
-            music.start()
+            cpage, cidx = page, idx
+            
+        if key_pressed == ord("p") and not _paused:
+            mixer.music.pause()
+            _paused = True
+
+        elif key_pressed == ord("p") and _paused:
+            mixer.music.unpause()
+            _paused = False
+
+        elif key_pressed == ord("s"):
+            if cidx == len(AUDIO_FILES[cpage]) - 1:
+                if cpage != len(AUDIO_FILES) - 1:
+                    cpage += 1
+                    cidx = 0
+                else:
+                    cpage, cidx = 0, 0
+
+            else:
+                cidx += 1
 
 
+        elif key_pressed == ord("a"):  
+            if cpage == 0:
+                if cidx == 0:
+                    cpage, cidx = 0, 0
+                else:
+                    cidx -= 1
+
+            else:
+                if cidx == 0:
+                    cpage -= 1
+                    cidx = len(AUDIO_FILES[cpage]) - 1
+
+                else:
+                    cidx -= 1
+
+        elif key_pressed == ord("w"):
+            if mixer.music.get_busy():
+                try:
+                    mixer.music.set_pos(0)
+                except:
+                    pass
+
+        elif key_pressed == ord("l") and not _loop:
+            _loop = True
+
+        elif key_pressed == ord("l") and _loop:
+            _loop = False
 
         key_pressed = stdscr.getch()
-
-
-
-
-
-
-
-
+    os._exit(0)
 
 current_path = initalize()
 curses.wrapper(main)
+
+
+
+
