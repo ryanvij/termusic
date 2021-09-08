@@ -25,6 +25,7 @@ cpage = None
 _skip = False
 _paused = False
 _loop = False
+std = None
 
 
 def extract_audiof(PATH):
@@ -56,11 +57,10 @@ def initalize():
 
     if arguments.track is None:
         with open(ASSETS/"termusicpaths.txt", "r") as rf:
-            if len(rf.readlines()) > 1:
+            if len(rf.readlines()) >= 1:
                 CURRENT_PATH = curses.wrapper(select_playlist)
                 return CURRENT_PATH
-                
-
+        
             else:
                 print("Track a directory, before starting the program.")
                 sys.exit()
@@ -132,7 +132,8 @@ def select_playlist(stdscr):
 
 
 def draw_utils():
-    utils = curses.newwin(5, 90, 0, 0)
+    y, x = std.getmaxyx()
+    utils = curses.newwin(5, x - 30, 0, 0)
     utils.box()
     if cpage is None and cidx is None:
         pass
@@ -217,6 +218,8 @@ def draw_playlist_box(stdscr, page, idx):
 
 
 def main(stdscr):
+    global std
+    std = stdscr
     mixer.init()
     curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)
     curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_WHITE)
