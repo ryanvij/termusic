@@ -9,6 +9,8 @@ import time
 import threading
 from pathlib import Path
 from pygame import mixer
+from utils import extract_audiof, write_file, chunks
+from ui import draw_select, select_playlist, draw_playlist_box
 
 
 # Relative path to assets folder, from __file__
@@ -26,28 +28,6 @@ _paused = False
 _loop = False
 std = None
 
-
-def extract_audiof(PATH):
-    return [os.path.abspath(f) for f in os.scandir(PATH) if f.is_file()
-            if os.path.splitext(f)[1] in audio_formats]
-
-def write_file(path):
-    
-    with open(ASSETS/"termusicpaths.txt", "a+") as f:
-        with open(ASSETS/"termusicpaths.txt", "r") as rf:
-            c = rf.readlines()
-            for pathf in c:
-                if pathf.strip("\n") == path:
-                    print("Directory is already being tracked.")
-                    sys.exit()
-                else:
-                    continue
-
-        f.write(path+"\n")
-        sys.exit()
-
-
-
 def initalize():
     global CURRENT_PATH
     parser = argparse.ArgumentParser(prog='termusic')
@@ -55,7 +35,7 @@ def initalize():
     arguments = parser.parse_args()
 
     if arguments.track is None:
-        with open(ASSETS/"termusicpaths.txt", "r") as rf:
+        with open(ASSETS/"paths.txt", "r") as rf:
             if len(rf.readlines()) >= 1:
                 CURRENT_PATH = curses.wrapper(select_playlist)
                 return CURRENT_PATH
@@ -85,54 +65,6 @@ def initalize():
             sys.exit()
 
 
-
-
-
-def chunks(lst, n):
-    for i in range(0, len(lst), n):
-        yield lst[i:i + n]
-
-def draw_select(stdscr, idx, paths):
-    curses.curs_set(0)
-    curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)
-    stdscr.clear()
-    pos = 3
-    stdscr.addstr(pos-2, 2, "Select Playlist", curses.color_pair(1))
-    for path in paths:
-        if paths.index(path) == idx:
-            stdscr.addstr(pos, 3, "> " +  path)
-        else:
-            stdscr.addstr(pos, 3, path)
-
-        pos += 2
-
-def select_playlist(stdscr):
-
-    idx = 0
-    paths = []
-    with open(ASSETS/"termusicpaths.txt", "r") as pt:
-        paths = list(map(lambda x: x.strip("\n"), pt.readlines()))
-    draw_select(stdscr, idx, paths)
-
-    key = stdscr.getch()
-    while key != 113:
-        if key == curses.KEY_DOWN and idx != len(paths) - 1:
-            idx += 1
-            draw_select(stdscr, idx, paths)
-        elif key == curses.KEY_UP and idx != 0:
-            idx -= 1
-            draw_select(stdscr, idx, paths)
-        elif key == curses.KEY_ENTER or key == 10:
-            if os.path.exists(paths[idx]):
-                return paths[idx]
-    
-
-        key = stdscr.getch()
-    os._exit(0)
-
-
-
-
 def draw_utils():
     y, x = std.getmaxyx()
     utils = curses.newwin(5, x - 30, 0, 0)
@@ -147,8 +79,6 @@ def draw_utils():
         if _paused:
             utils.addstr(2, ux - 10, "PAUSED")
     utils.refresh()
-
-    
 
 
 #--------------------------------------------------------------------
@@ -202,24 +132,7 @@ def music():
 # UI 
 #--------------------------------------------------------------------
 
-def draw_playlist_box(stdscr, page, idx):
-    maxy, maxx = stdscr.getmaxyx()
-    pos = 3
-    playlist_box = curses.newwin(maxy, 30, 0, maxx - 30)
-    playlist_box.box()
-    playlist_box.addstr(1, 8, f"Tracks - {page + 1}/{len(AUDIO_FILES)}", curses.color_pair(1))
 
-
-    for af in AUDIO_FILES[page]:
-        if AUDIO_FILES[page].index(af) == idx:
-            playlist_box.addstr(pos, 2, textwrap.shorten(os.path.splitext(os.path.basename(af))[0], width=27, placeholder="..."), curses.color_pair(2))
-            pos += 1
-        else:
-            playlist_box.addstr(pos, 2, textwrap.shorten(os.path.splitext(os.path.basename(af))[0], width=27, placeholder="..."))
-            pos += 1
-
-    stdscr.refresh()
-    playlist_box.refresh()
 
 
 def main(stdscr):
@@ -236,7 +149,7 @@ def main(stdscr):
     _, x = stdscr.getmaxyx()
     MAX_ROW = round(x / 5)
     AUDIO_FILES = list(chunks(extract_audiof(CURRENT_PATH), MAX_ROW))
-    draw_playlist_box(stdscr, page, idx)
+    draw_playlist_box(stdscr, page, idx, AUDIO_FILES)
     draw_utils()
 
     music_ = threading.Thread(target=music)
@@ -248,21 +161,17 @@ def main(stdscr):
         while key_pressed != 113:
             if key_pressed == curses.KEY_DOWN and idx != len(AUDIO_FILES[page]) - 1:
                 idx += 1
-                draw_playlist_box(stdscr, page, idx)
 
             if key_pressed == curses.KEY_UP and idx != 0:
                 idx -= 1
-                draw_playlist_box(stdscr, page, idx)
 
             if key_pressed == curses.KEY_RIGHT and page != len(AUDIO_FILES) - 1:
                 page += 1
                 idx = 0
-                draw_playlist_box(stdscr, page, idx)
 
             if key_pressed == curses.KEY_LEFT and page != 0:
                 page -= 1
                 idx = 0
-                draw_playlist_box(stdscr, page, idx)
 
             if key_pressed == 10:
                 cpage, cidx = page, idx
@@ -319,7 +228,7 @@ def main(stdscr):
                 _loop = False
 
             draw_utils()
-            draw_playlist_box(stdscr, page, idx)
+            draw_playlist_box(stdscr, page, idx, AUDIO_FILES)
             key_pressed = stdscr.getch()
     except:
         print("WINDOW RESIZE ERROR")
